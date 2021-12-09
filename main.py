@@ -34,6 +34,9 @@ class VectorClock:
     joined_vec = list(map(max, zip(self.vector, other.vector)))
     return VectorClock(len(joined_vec), joined_vec)
 
+  def __le__(self, other):
+    return all(map(lambda p: p[0] <= p[1], zip(self.vector, other.vector)))
+  
   def __str__(self):
     return str(self.vector)
     
@@ -76,7 +79,21 @@ class AtomicRMW:
   atomic_obj: str
 
 
-def init_vector_clock_state(num_threads: int, locks: List, atomic_objects:List, shared_locations: List) -> Tuple[List, dict, dict, dict]:
+class VectorClockState:
+  def __init__(self, C, L, R, W):
+    self.state = (C, L, R, W)
+  
+  def __getitem__(self, item):
+    return self.state[item]
+
+  def __setitem__(self, key, value):
+    self.state[key] = value
+
+  def __str__(self):
+    return str(self.state)
+  
+
+def init_vector_clock_state(num_threads: int, locks: List, atomic_objects:List, shared_locations: List) -> VectorClockState:
   C = [VectorClock(num_threads) for _ in range(num_threads)]
   for i, vec in enumerate(C):
     vec.increment(i)
@@ -85,22 +102,50 @@ def init_vector_clock_state(num_threads: int, locks: List, atomic_objects:List, 
   R = dict((loc, VectorClock(num_threads)) for loc in shared_locations)
   W = dict((loc, VectorClock(num_threads)) for loc in shared_locations)
 
-  return C, L, R, W
+  return VectorClockState(C, L, R, W)
 
+def find_racy_thread(location_vec, clock_vec) -> int:
+  for i in range(len(location_vec.vector)):
+    if location_vec.vector[i] > clock_vec.vector[i]:
+      return i
+
+  assert "Could not find racy thread u"
+
+def report_write_read_race(u, t, x):
+  print(f"WriteReadRace({u}, {t}, {x})")
+
+def report_write_write_race(u, t, x):
+  print(f"WriteWriteRace({u}, {t}, {x})")
+
+def report_read_write_race(u, t, x):
+  print(f"ReadWriteRace({u}, {t}, {x})")
 
 def run_algorithm(state, program):
   for instr in program:
     if isinstance(instr, Read):
       t = instr.thread_id
       x = instr.location
-      # todo check read-write race
-      # if not (state[3][x] <= state[0][t]): report_read_write_race(state)
+      # todo check write-read race
+      if not (state[3][x] <= state[0][t]):
+        u = find_racy_thread(state[3][x], state[0][t])
+        report_write_read_race(u, t, x)
+        break
+        
       state[2][x][t] = state[0][t][t]
 
     elif isinstance(instr, Write):
       t = instr.thread_id
       x = instr.location
-      # todo check write-write and write-read race
+      # Check write-write and write-read race
+      if not (state[3][x] <= state[0][t]):
+        u = find_racy_thread(state[3][x], state[0][t])
+        report_write_write_race(u, t, x)
+        break
+      elif not (state[2][x] <= state[0][t]): 
+        u = find_racy_thread(state[2][x], state[0][t])
+        report_read_write_race(u, t, x)
+        break
+        
       state[3][x][t] = state[0][t][t]
     
     elif isinstance(instr, Acquire) or isinstance(instr, AtomicLoad):
@@ -128,24 +173,39 @@ def run_algorithm(state, program):
 
 
 # Algorithm config
-threads = 2
+# threads = 2
+# locks = []
+# atomic_objects = ['bit']
+# shared_locations = ['x']
+
+# program = [
+#   AtomicRMW(0, 'bit'),
+#   AtomicRMW(1, 'bit'),
+#   AtomicRMW(1, 'bit'),
+#   Read(0, 'x'),
+#   Write(0, 'x'),
+#   AtomicRMW(1, 'bit'),
+#   AtomicStore(0, 'bit'),
+#   AtomicRMW(1, 'bit'),
+#   Read(1, 'x'),
+#   Write(1, 'x'),
+#   AtomicStore(1, 'bit')
+# ]
+
+threads = 3
 locks = []
-atomic_objects = ['bit']
-shared_locations = ['x']
+atomic_objects = ['f']
+shared_locations = ['d1', 'd2']
 
 program = [
-  AtomicRMW(0, 'bit'),
-  AtomicRMW(1, 'bit'),
-  AtomicRMW(1, 'bit'),
-  Read(0, 'x'),
-  Write(0, 'x'),
-  AtomicRMW(1, 'bit'),
-  AtomicStore(0, 'bit'),
-  AtomicRMW(1, 'bit'),
-  Read(1, 'x'),
-  Write(1, 'x'),
-  AtomicStore(1, 'bit')
+  Write(0, 'd1'),
+  AtomicStore(0, 'f'),
+  Write(1, 'd2'),
+  AtomicStore(1, 'f'),
+  AtomicLoad(2, 'f'),
+  Read(2, 'd1')
 ]
+
 
 state = init_vector_clock_state(threads, locks, atomic_objects, shared_locations)
 print(state)
