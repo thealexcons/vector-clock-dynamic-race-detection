@@ -1,4 +1,4 @@
-from vector_clock import WriteReadRace, WriteWriteRace, init_vector_clock_state, run_algorithm
+from vector_clock import ReadWriteRace, WriteReadRace, WriteWriteRace, init_vector_clock_state, run_algorithm
 from instructions import *
 
 class Program1:
@@ -48,6 +48,30 @@ class Program2:
     _, race = run_algorithm(self.state, self.program)
     assert race and isinstance(race, WriteReadRace) and race.x == 'd1'
 
+class Program3:
+  threads = 2
+  locks = ['m', 'n']
+  atomic_objects = []
+  shared_locations = ['x', 'y']
+
+  program = [
+    Acquire(0, 'm'),
+    Read(0, 'x'),
+    Write(0, 'y'),
+    Release(0, 'm'),
+    Acquire(1, 'n'),
+    Read(1, 'x'),
+    Release(1, 'n'),
+    Acquire(0, 'm'),
+    Write(0, 'x')
+  ]
+
+  state = init_vector_clock_state(threads, locks, atomic_objects, shared_locations)
+
+  def test(self):
+    _, race = run_algorithm(self.state, self.program)
+    assert race and isinstance(race, ReadWriteRace) and race.x == 'x'
+
 
 if __name__ == "__main__":
   p1 = Program1()
@@ -55,4 +79,7 @@ if __name__ == "__main__":
 
   p2 = Program2()
   p2.test()
+  
+  p3 = Program3()
+  p3.test()
   

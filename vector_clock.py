@@ -159,7 +159,7 @@ def run_algorithm(state, program, verbose=False) -> Tuple[VectorClockState, Opti
       
     elif isinstance(instr, Release) or isinstance(instr, AtomicStore):
       t = instr.thread_id
-      m = instr.lock if isinstance(instr, Acquire) else instr.atomic_obj
+      m = instr.lock if isinstance(instr, Release) else instr.atomic_obj
       state[L][m] = copy.deepcopy(state[C][t])
       state[C][t].increment(t)
     
