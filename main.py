@@ -121,50 +121,54 @@ def report_read_write_race(u, t, x):
   print(f"ReadWriteRace({u}, {t}, {x})")
 
 def run_algorithm(state, program):
+  C = 0
+  L = 1
+  R = 2
+  W = 3
   for instr in program:
     if isinstance(instr, Read):
       t = instr.thread_id
       x = instr.location
       # todo check write-read race
-      if not (state[3][x] <= state[0][t]):
-        u = find_racy_thread(state[3][x], state[0][t])
+      if not (state[W][x] <= state[C][t]):
+        u = find_racy_thread(state[W][x], state[C][t])
         report_write_read_race(u, t, x)
         break
         
-      state[2][x][t] = state[0][t][t]
+      state[R][x][t] = state[C][t][t]
 
     elif isinstance(instr, Write):
       t = instr.thread_id
       x = instr.location
       # Check write-write and write-read race
-      if not (state[3][x] <= state[0][t]):
-        u = find_racy_thread(state[3][x], state[0][t])
+      if not (state[W][x] <= state[C][t]):
+        u = find_racy_thread(state[W][x], state[C][t])
         report_write_write_race(u, t, x)
         break
-      elif not (state[2][x] <= state[0][t]): 
-        u = find_racy_thread(state[2][x], state[0][t])
+      elif not (state[R][x] <= state[C][t]): 
+        u = find_racy_thread(state[R][x], state[C][t])
         report_read_write_race(u, t, x)
         break
         
-      state[3][x][t] = state[0][t][t]
+      state[W][x][t] = state[C][t][t]
     
     elif isinstance(instr, Acquire) or isinstance(instr, AtomicLoad):
       t = instr.thread_id
       m = instr.lock if isinstance(instr, Acquire) else instr.atomic_obj
-      state[0][t] = state[0][t] + state[1][m]
+      state[C][t] = state[C][t] + state[L][m]
       
     elif isinstance(instr, Release) or isinstance(instr, AtomicStore):
       t = instr.thread_id
       m = instr.lock if isinstance(instr, Acquire) else instr.atomic_obj
-      state[1][m] = copy.deepcopy(state[0][t])
-      state[0][t].increment(t)
+      state[L][m] = copy.deepcopy(state[C][t])
+      state[C][t].increment(t)
     
     elif isinstance(instr, AtomicRMW):
       t = instr.thread_id
       o = instr.atomic_obj
-      D = state[0][t] + state[1][o]
-      state[1][o] = D
-      state[0][t] = copy.deepcopy(D).increment(t)
+      D = state[C][t] + state[L][o]
+      state[L][o] = D
+      state[C][t] = copy.deepcopy(D).increment(t)
       
     else:
       raise ValueError("Unknown instruction")
